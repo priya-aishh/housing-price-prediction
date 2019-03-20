@@ -370,7 +370,7 @@ RMSE_rf = score_rf
 print("Mean square error: ",MSE_rf)
 print("Root mean sq error:",RMSE_rf)
 
-errors_rf = abs(pred_rf - y_test)
+errors_rf = abs(predictions - y_test)
 print('Mean Absolute Error:', round(np.mean(errors_rf), 2), 'degrees.')
 mape = np.mean(100 * (errors_rf / y_test))
 accuracy = 100 - mape
