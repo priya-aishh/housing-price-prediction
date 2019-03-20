@@ -13,14 +13,14 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.preprocessing import normalize
 
-training_data = pd.read_csv("dataset\train.csv")
+training_data = pd.read_csv("dataset\\train.csv")
 
-test_data = pd.read_csv("dataset\test.csv")
+test_data = pd.read_csv("dataset\\test.csv")
 
 #Correlation matrix
 correlation_matrice = training_data.corr()
 f, ax = plt.subplots( figsize=(15, 12))
-sns.heatmap(correlation_matrice,vmin=0.2, vmax=0.8, square= True, cmap= 'BuPu')
+sns.heatmap(correlation_matrice,vmin=0.1, vmax=0.6, square= True, cmap= 'OrRd')
 plt.xlabel('The house features in the x axis',fontsize= 13)
 plt.ylabel('The house features in the y axis',fontsize= 13)
 plt.title('Fig 1 - The correlation matrix between all the featues ', fontsize= 16);
@@ -188,38 +188,191 @@ print("New  shape after one-hot encoding:" , np.shape(data))
 
 from sklearn.linear_model import LinearRegression
 from sklearn import preprocessing
-import statsmodels.api as sm
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_predict
+#import statsmodels.api as sm
 from sklearn.metrics import mean_squared_error
+from sklearn import metrics
 from math import sqrt
 
-x_train = data.drop('SalePrice',axis=1)
-y_train = data['SalePrice']
+
+data['TotalSF'] = data['TotalBsmtSF'] + data['1stFlrSF'] + data['2ndFlrSF'] + data['GarageArea']
+x = data.drop('SalePrice',axis=1)
+y = data['SalePrice']
+
+scaler = preprocessing.StandardScaler()
+x_train_s = scaler.fit_transform(x)   
+
+linear1 = LinearRegression()
+linear1.fit(x_train_s, y)
+pred = linear1.predict(x_train_s)
+ax = sns.regplot(x=pred,y=y-pred,lowess=True,line_kws={"color":"black"})
+ax.set_title('Figure 5 - Residual plot for original data.')
+ax.set_xlabel('Predicted values')
+ax.set_ylabel('Residuals')
+plt.show();
+
+print("Mean square error: ",mean_squared_error(y, pred))
+print("Root mean sq error:",sqrt(mean_squared_error(y, pred)))
+
+print("from above result we can see that the mean sq error is very large we need to do some transformations on variables")
+print("So we will do log transformation on traget variable to check the mse value if it has improved a bit")
+
+data['SalePrice']=np.log(data['SalePrice'])
+y = data['SalePrice']
+
+linear2 = LinearRegression()
+linear2.fit(x_train_s, y)
+pred = linear2.predict(x_train_s)
+ax = sns.regplot(x=pred,y=y-pred,lowess=True,line_kws={"color":"black"})
+ax.set_title('Figure 6 - Residual plot for transformed data.')
+ax.set_xlabel('Predicted values')
+ax.set_ylabel('Residuals')
+plt.show();
+
+print("**************************************************************")
+
+print("\nAfter cross validation")
+kf = KFold(5, random_state=7, shuffle=True)
+
+x = data.drop('SalePrice',axis=1).values
+y = data['SalePrice'].values
+for i, j in kf.split(x):
+      x_train, x_test = x[i], x[j] 
+      y_train, y_test = y[i], y[j]  
 
 scaler = preprocessing.StandardScaler() 
-x_train_s = scaler.fit_transform(x_train)   
+x_train_s = scaler.fit_transform(x_train)  
+x_test_s = scaler.fit_transform(x_test)
 
-linear1 = LinearRegression()
-linear1.fit(x_train_s, y_train)
-pred = linear1.predict(x_train_s)
-ax = sns.regplot(x=pred,y=y_train-pred,lowess=True,line_kws={"color":"black"})
-ax.set_title('Figure 6 - Residual plot for original data.')
-ax.set_xlabel('Predicted values')
-ax.set_ylabel('Residuals')
-plt.show();
-
-print("Mean square error: ",mean_squared_error(y_train, pred))
-print("Mean square error is very large,we need to use some log transformations")
-
-y_train = np.log(y_train)
-data['SalePrice']=np.log(data['SalePrice'])
-linear1 = LinearRegression()
-linear1.fit(x_train_s, y_train)
-pred = linear1.predict(x_train_s)
-ax = sns.regplot(x=pred,y=y_train-pred,lowess=True,line_kws={"color":"black"})
-ax.set_title('Figure 7 - Residual plot for original data.')
-ax.set_xlabel('Predicted values')
-ax.set_ylabel('Residuals')
-plt.show();
+linear = LinearRegression()
+linear.fit(x_train_s, y_train)
+pred = linear.predict(x_train_s)
 
 print("Mean square error: ",mean_squared_error(y_train, pred))
 print("Root mean sq error:",sqrt(mean_squared_error(y_train, pred)))
+errors = abs(pred - y_train)
+print('Mean Absolute Error:', round(np.mean(errors), 2), 'degrees.')
+
+mape = 100 * (errors /y_train)
+accuracy = 100 - np.mean(mape)
+print('Accuracy:', round(accuracy, 2), '%.')
+print("\n")
+
+#Gradient Descent
+print("After gradient descent")
+
+def hypothesis(theta, X, n):
+    h = np.ones((x_train_s.shape[0],1))
+    theta = theta.reshape(1,n+1)
+    for i in range(0,x_train_s.shape[0]):
+        h[i] = float(np.matmul(theta, X[i]))
+    h = h.reshape(x_train_s.shape[0])
+    return h
+
+def predict(row, coefficients):
+	yhat = coefficients[0]
+	for i in range(len(row)-1):
+		yhat += coefficients[i + 1] * row[i]
+	return yhat
+
+def sgd(train, alpha, n):
+	coef = [0.0 for i in range(len(train[0]))]
+	for epoch in range(n):
+		sum_error = 0
+		for row in train:
+			yhat = predict(row, coef)
+			error = yhat - row[-1]
+			sum_error += error**2
+            cost[epoch] = sum_error
+			coef[0] = coef[0] - alpha * error
+			for i in range(len(row)-1):
+				coef[i + 1] = coef[i + 1] - alpha * error * row[i]
+	return coef, cost
+
+theta, cost = sgd(x_train_s, y_train,0.0001, 300000)
+cost = list(cost)
+n_iterations = [x for x in range(1,300001)]
+plt.plot(n_iterations, cost)
+plt.xlabel('No. of iterations')
+plt.ylabel('Cost')
+plt.title("Line Curve Representation of Cost Minimization using SGD")
+
+pred = hypothesis(theta,x_test_s,x_test_s.shape[1]-1)
+print("Mean square error: ",mean_squared_error(y_test, pred))
+print("Root mean sq error:",sqrt(mean_squared_error(y_test, pred)))
+errors = abs(pred - y_test)
+print('Mean Absolute Error:', round(np.mean(errors), 2), 'degrees.')
+
+mape = 100 * (errors / y_test)
+accuracy = 100 - np.mean(mape)
+print('Accuracy:', round(accuracy, 2), '%.')
+
+
+from sklearn.ensemble import RandomForestRegressor
+
+print("\n Random Forests ")
+
+rf = RandomForestRegressor(n_estimators = 500, random_state = 42)
+
+labels = np.array(y_train)
+features = data.drop('SalePrice',axis=1)
+
+# Train the model on training data
+rf.fit(x_train, labels);
+pred_rf = rf.predict(x_test) 
+
+MSE_rf = mean_squared_error(y_test,pred_rf)
+score_rf = np.sqrt(metrics.mean_squared_error(y_test,pred_rf))
+RMSE_rf = score_rf
+print("Mean square error: ",MSE_rf)
+print("Root mean sq error:",RMSE_rf)
+
+errors_rf = abs(pred_rf - y_test)
+print('Mean Absolute Error:', round(np.mean(errors_rf), 2), 'degrees.')
+
+mape_rf = 100 * (errors_rf/ y_test)
+accuracy_rf = 100 - np.mean(mape_rf)
+print('Accuracy:', round(accuracy_rf, 2), '%.')
+
+print("Less and important features\n")
+# Get numerical feature importances
+feature_list = list(data.drop(['SalePrice'], axis=1).columns)
+importances = list(rf.feature_importances_)
+indices = np.argsort(importances)
+# List of tuples with variable and importance
+feature_importances = [(x_train, round(importance, 2)) for x_train, importance in zip(feature_list, importances)]
+# Sort the feature importances by most important first
+feature_importances = sorted(feature_importances, key = lambda x: x[1], reverse = True)
+# Print out the feature and importances 
+print("Importance of features in ascending order")
+plt.barh(range(len(indices)),rf.feature_importances_[indices],color='b', align='center')
+plt.show()
+[print('Variable: {:20} Importance: {}'.format(*pair)) for pair in feature_importances];
+print("\n")
+
+# New random forest with only the important variables
+rf_most_important = RandomForestRegressor(n_estimators= 1000, random_state=42)
+# Extract the most important features
+important_indices = [feature_list.index('OverallQual'), feature_list.index('GrLivArea'), feature_list.index('TotalBsmtSF'), feature_list.index('GarageCars'), feature_list.index('GarageArea'), feature_list.index('YearBuilt'), feature_list.index('BsmtFinSF1'), feature_list.index('1stFlrSF'), feature_list.index('LotArea'),feature_list.index('OverallCond'),feature_list.index('YearRemodAdd'),feature_list.index('BsmtUnfSF'),feature_list.index('FireplaceQu'),feature_list.index('GarageYrBlt'),feature_list.index('GarageFinish'),feature_list.index('CentralAir_N'),feature_list.index('CentralAir_Y')]
+train_important = x_train[:, important_indices]
+
+# Train the random forest
+rf_most_important.fit(train_important, labels)
+# Make predictions and determine the error
+predictions = rf_most_important.predict(x_test)
+# Display the performance metrics
+MSE_rf = mean_squared_error(y_test,predictions)
+score_rf = np.sqrt(metrics.mean_squared_error(y_test,predections))
+RMSE_rf = score_rf
+print("Mean square error: ",MSE_rf)
+print("Root mean sq error:",RMSE_rf)
+
+errors_rf = abs(pred_rf - y_test)
+print('Mean Absolute Error:', round(np.mean(errors_rf), 2), 'degrees.')
+mape = np.mean(100 * (errors_rf / y_test))
+accuracy = 100 - mape
+print('Accuracy:', round(accuracy, 2), '%.')
+
