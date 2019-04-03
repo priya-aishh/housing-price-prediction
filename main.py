@@ -13,14 +13,30 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.preprocessing import normalize
 
-training_data = pd.read_csv("dataset\\train.csv")
+plt.rcParams['figure.figsize'] = (8, 5)
 
-test_data = pd.read_csv("dataset\\test.csv")
+training_data = pd.read_csv("C:\\Users\\priya\\OneDrive\\Documents\\Kaggle\\house-prices-advanced-regression-techniques\\train.csv")
+test_data = pd.read_csv("C:\\Users\\priya\\OneDrive\\Documents\\Kaggle\\house-prices-advanced-regression-techniques\\test.csv")
+
+training_data.isnull().sum()
+test_data.isnull().sum()
+
+# Determining the Skewness of data 
+print ("Skew is:", training_data.SalePrice.skew())
+
+plt.hist(training_data.SalePrice)
+plt.show()
+
+# After log transformation of the data it looks much more center aligned
+Skewed_SP = np.log(training_data['SalePrice']+1)
+print ("Skew is:", Skewed_SP.skew())
+plt.hist(Skewed_SP, color='blue')
+plt.show()
 
 #Correlation matrix
 correlation_matrice = training_data.corr()
 f, ax = plt.subplots( figsize=(15, 12))
-sns.heatmap(correlation_matrice,vmin=0.1, vmax=0.6, square= True, cmap= 'OrRd')
+sns.heatmap(correlation_matrice,vmin=0.1, vmax=0.6, square= True, cmap = 'OrRd')
 plt.xlabel('The house features in the x axis',fontsize= 13)
 plt.ylabel('The house features in the y axis',fontsize= 13)
 plt.title('Fig 1 - The correlation matrix between all the featues ', fontsize= 16);
@@ -197,11 +213,12 @@ from sklearn.metrics import mean_squared_error
 from sklearn import metrics
 from math import sqrt
 
-
+#Feature engineering
 data['TotalSF'] = data['TotalBsmtSF'] + data['1stFlrSF'] + data['2ndFlrSF'] + data['GarageArea']
 x = data.drop('SalePrice',axis=1)
 y = data['SalePrice']
 
+#feature scaling
 scaler = preprocessing.StandardScaler()
 x_train_s = scaler.fit_transform(x)   
 
@@ -217,9 +234,6 @@ plt.show();
 print("Mean square error: ",mean_squared_error(y, pred))
 print("Root mean sq error:",sqrt(mean_squared_error(y, pred)))
 
-print("from above result we can see that the mean sq error is very large we need to do some transformations on variables")
-print("So we will do log transformation on traget variable to check the mse value if it has improved a bit")
-
 data['SalePrice']=np.log(data['SalePrice'])
 y = data['SalePrice']
 
@@ -232,147 +246,122 @@ ax.set_xlabel('Predicted values')
 ax.set_ylabel('Residuals')
 plt.show();
 
+print("Mean square error: ",mean_squared_error(y, pred))
+print("Root mean sq error:",sqrt(mean_squared_error(y, pred)))
+
+
 print("**************************************************************")
 
-print("\nAfter cross validation")
-kf = KFold(5, random_state=7, shuffle=True)
+print("\nfeature selection, cross validation and feature scaling")
+
+from sklearn.ensemble import RandomForestRegressor 
+from sklearn.feature_selection import SelectFromModel
+
+#Tree-based feature selection
+y_train = (data['SalePrice'])
+x_train = (data.drop('SalePrice',axis=1))
+
+#clf = ExtraTreesRegressor(random_state=0,n_estimators=1400)
+clf = RandomForestRegressor(n_estimators=1400, criterion='mse', 
+                max_depth=None, min_samples_split=2, min_samples_leaf=1,
+                min_weight_fraction_leaf=0.0, max_features='auto', max_leaf_nodes=None, 
+                min_impurity_decrease=0.0, min_impurity_split=None, bootstrap=True,
+                oob_score=False, n_jobs=1, random_state=0, verbose=0, warm_start=False)
+
+clf = clf.fit(x_train,y_train)
+
+#Organinzing the features selected for visualization
+pd.set_option('display.max_columns', None)#to print all the columns of a data frame
+data = np.zeros((1,x_train.shape[1])) 
+data = pd.DataFrame(data, columns=x_train.columns)
+data.iloc[0] = clf.feature_importances_
+data = data.T.sort_values(data.index[0], ascending=False).T
+
+#Select the features based on the threshold
+model = SelectFromModel(clf, prefit=True,threshold=1e-3)
+#Reduce data to the selected features.
+aux = model.transform(x_train)
+
+print("\n New shape for train after tree-based feature selection: {}".format(aux.shape))
+data_train_less_features_aux = pd.DataFrame(aux)
+data_train_less_features_aux.columns = [data.columns[i] for i in range(0,aux.shape[1]) ]
+print("\n Features selected :")
+print(data_train_less_features_aux.columns)
+data_train_less_features = pd.concat([data_train_less_features_aux,pd.DataFrame(y_train)],axis=1)
+#cross validation
+x = data_train_less_features.drop('SalePrice',axis=1).values
+y = data_train_less_features['SalePrice'].values
+x_train,x_test,y_train,y_test = train_test_split(x,y,test_size=0.3,random_state = 42)
+"""kf = KFold(5, random_state=7, shuffle=True)
 
 x = data.drop('SalePrice',axis=1).values
 y = data['SalePrice'].values
 for i, j in kf.split(x):
       x_train, x_test = x[i], x[j] 
-      y_train, y_test = y[i], y[j]  
-
+      y_train, y_test = y[i], y[j] """ 
+#feature scaling
 scaler = preprocessing.StandardScaler() 
 x_train_s = scaler.fit_transform(x_train)  
 x_test_s = scaler.fit_transform(x_test)
 
 linear = LinearRegression()
 linear.fit(x_train_s, y_train)
-pred = linear.predict(x_train_s)
-
-print("Mean square error: ",mean_squared_error(y_train, pred))
-print("Root mean sq error:",sqrt(mean_squared_error(y_train, pred)))
-errors = abs(pred - y_train)
-print('Mean Absolute Error:', round(np.mean(errors), 2), 'degrees.')
-
-mape = 100 * (errors /y_train)
-accuracy = 100 - np.mean(mape)
-print('Accuracy:', round(accuracy, 2), '%.')
-print("\n")
-
-#Gradient Descent
-print("After gradient descent")
-
-def hypothesis(theta, X, n):
-    h = np.ones((x_train_s.shape[0],1))
-    theta = theta.reshape(1,n+1)
-    for i in range(0,x_train_s.shape[0]):
-        h[i] = float(np.matmul(theta, X[i]))
-    h = h.reshape(x_train_s.shape[0])
-    return h
-
-def predict(row, coefficients):
-	yhat = coefficients[0]
-	for i in range(len(row)-1):
-		yhat += coefficients[i + 1] * row[i]
-	return yhat
-
-def sgd(train, alpha, n):
-	coef = [0.0 for i in range(len(train[0]))]
-	for epoch in range(n):
-		sum_error = 0
-		for row in train:
-			yhat = predict(row, coef)
-			error = yhat - row[-1]
-			sum_error += error**2
-            cost[epoch] = sum_error
-			coef[0] = coef[0] - alpha * error
-			for i in range(len(row)-1):
-				coef[i + 1] = coef[i + 1] - alpha * error * row[i]
-	return coef, cost
-
-theta, cost = sgd(x_train_s, y_train,0.0001, 300000)
-cost = list(cost)
-n_iterations = [x for x in range(1,300001)]
-plt.plot(n_iterations, cost)
-plt.xlabel('No. of iterations')
-plt.ylabel('Cost')
-plt.title("Line Curve Representation of Cost Minimization using SGD")
-
-pred = hypothesis(theta,x_test_s,x_test_s.shape[1]-1)
-print("Mean square error: ",mean_squared_error(y_test, pred))
-print("Root mean sq error:",sqrt(mean_squared_error(y_test, pred)))
+pred = linear.predict(x_test_s)
+score = np.sqrt(metrics.mean_squared_error(y_test,pred))
+print("Average RMSE: {}".format(score))
 errors = abs(pred - y_test)
 print('Mean Absolute Error:', round(np.mean(errors), 2), 'degrees.')
 
-mape = 100 * (errors / y_test)
+mape = 100 * (errors /y_test)
 accuracy = 100 - np.mean(mape)
 print('Accuracy:', round(accuracy, 2), '%.')
 
-
 from sklearn.ensemble import RandomForestRegressor
 
-print("\n Random Forests ")
+print("Random Forests ")
 
 rf = RandomForestRegressor(n_estimators = 500, random_state = 42)
-
 labels = np.array(y_train)
-features = data.drop('SalePrice',axis=1)
 
 # Train the model on training data
-rf.fit(x_train, labels);
+rf.fit(x_train, labels)
 pred_rf = rf.predict(x_test) 
-
-MSE_rf = mean_squared_error(y_test,pred_rf)
 score_rf = np.sqrt(metrics.mean_squared_error(y_test,pred_rf))
-RMSE_rf = score_rf
-print("Mean square error: ",MSE_rf)
-print("Root mean sq error:",RMSE_rf)
+print("Average RMSE: {}".format(score_rf))
 
 errors_rf = abs(pred_rf - y_test)
-print('Mean Absolute Error:', round(np.mean(errors_rf), 2), 'degrees.')
-
 mape_rf = 100 * (errors_rf/ y_test)
 accuracy_rf = 100 - np.mean(mape_rf)
 print('Accuracy:', round(accuracy_rf, 2), '%.')
 
-print("Less and important features\n")
-# Get numerical feature importances
-feature_list = list(data.drop(['SalePrice'], axis=1).columns)
-importances = list(rf.feature_importances_)
-indices = np.argsort(importances)
-# List of tuples with variable and importance
-feature_importances = [(x_train, round(importance, 2)) for x_train, importance in zip(feature_list, importances)]
-# Sort the feature importances by most important first
-feature_importances = sorted(feature_importances, key = lambda x: x[1], reverse = True)
-# Print out the feature and importances 
-print("Importance of features in ascending order")
-plt.barh(range(len(indices)),rf.feature_importances_[indices],color='b', align='center')
-plt.show()
-[print('Variable: {:20} Importance: {}'.format(*pair)) for pair in feature_importances];
-print("\n")
+from sklearn.ensemble import GradientBoostingRegressor
+print("Gadient Boosting Regressor")
+gb = GradientBoostingRegressor()
+gb.fit(x_train, y_train)
+pred_gb = gb.predict(x_test) 
+MSE_gb = mean_squared_error(y_test,pred_gb)
+score_gb = np.sqrt(metrics.mean_squared_error(y_test,pred_gb))
+print("Average RMSE: {}".format(score_gb))
 
-# New random forest with only the important variables
-rf_most_important = RandomForestRegressor(n_estimators= 1000, random_state=42)
-# Extract the most important features
-important_indices = [feature_list.index('OverallQual'), feature_list.index('GrLivArea'), feature_list.index('TotalBsmtSF'), feature_list.index('GarageCars'), feature_list.index('GarageArea'), feature_list.index('YearBuilt'), feature_list.index('BsmtFinSF1'), feature_list.index('1stFlrSF'), feature_list.index('LotArea'),feature_list.index('OverallCond'),feature_list.index('YearRemodAdd'),feature_list.index('BsmtUnfSF'),feature_list.index('FireplaceQu'),feature_list.index('GarageYrBlt'),feature_list.index('GarageFinish'),feature_list.index('CentralAir_N'),feature_list.index('CentralAir_Y')]
-train_important = x_train[:, important_indices]
+errors_gb = abs(pred_gb - y_test)
+mape_gb = 100 * (errors_gb/ y_test)
+accuracy_gb = 100 - np.mean(mape_gb)
+print('Accuracy:', round(accuracy_gb, 2), '%.')
 
-# Train the random forest
-rf_most_important.fit(train_important, labels)
-# Make predictions and determine the error
-predictions = rf_most_important.predict(x_test)
-# Display the performance metrics
-MSE_rf = mean_squared_error(y_test,predictions)
-score_rf = np.sqrt(metrics.mean_squared_error(y_test,predections))
-RMSE_rf = score_rf
-print("Mean square error: ",MSE_rf)
-print("Root mean sq error:",RMSE_rf)
-
-errors_rf = abs(predictions - y_test)
-print('Mean Absolute Error:', round(np.mean(errors_rf), 2), 'degrees.')
-mape = np.mean(100 * (errors_rf / y_test))
-accuracy = 100 - mape
-print('Accuracy:', round(accuracy, 2), '%.')
-
+print("Multilayer Perceptron")
+from sklearn.neural_network import MLPRegressor
+classifier = MLPRegressor( hidden_layer_sizes=(80,50,20), activation='relu',solver='adam', 
+                          alpha=1e-3, batch_size='auto', learning_rate='constant', 
+                          learning_rate_init=0.001, power_t=0.5, max_iter=100, 
+                          shuffle=True, random_state=7, tol=0.0001, 
+                          verbose=False, warm_start=False, momentum=0.9, nesterovs_momentum=True, 
+                          early_stopping=False, validation_fraction=0.1, beta_1=0.9,
+                          beta_2=0.999, epsilon=1e-08)
+classifier.fit(x_train_s, y_train)
+pred_mlp = classifier.predict(x_test_s)
+score_mlp = np.sqrt(metrics.mean_squared_error(y_test,pred_mlp))
+print("Average RMSE: {}".format(score_mlp))
+errors_mlp = abs(pred_mlp - y_test)
+mape_mlp = 100 * (errors_mlp/ y_test)
+accuracy_mlp = 100 - np.mean(mape_mlp)
+print('Accuracy:', round(accuracy_mlp, 2), '%.')
