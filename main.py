@@ -304,6 +304,7 @@ scaler = preprocessing.StandardScaler()
 x_train_s = scaler.fit_transform(x_train)  
 x_test_s = scaler.fit_transform(x_test)
 
+print("Linear Regression")
 linear = LinearRegression()
 linear.fit(x_train_s, y_train)
 pred = linear.predict(x_test_s)
