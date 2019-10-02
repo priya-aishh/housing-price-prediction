@@ -15,8 +15,8 @@ from sklearn.preprocessing import normalize
 
 plt.rcParams['figure.figsize'] = (8, 5)
 
-training_data = pd.read_csv("C:\\Users\\priya\\OneDrive\\Documents\\Kaggle\\house-prices-advanced-regression-techniques\\train.csv")
-test_data = pd.read_csv("C:\\Users\\priya\\OneDrive\\Documents\\Kaggle\\house-prices-advanced-regression-techniques\\test.csv")
+training_data = pd.read_csv("train.csv")
+test_data = pd.read_csv("test.csv")
 
 training_data.isnull().sum()
 test_data.isnull().sum()
